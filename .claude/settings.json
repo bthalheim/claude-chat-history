@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/save-transcript.ps1"
+            "command": "python .claude/hooks/save_transcript.py"
           }
         ]
       }
