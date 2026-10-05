@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -55,9 +57,12 @@ func (s syncState) describe() string {
 	return s.label()
 }
 
-// store locates the local Claude Code session directory for one project.
+// store locates Claude Code's central session storage. Each session is
+// restored to the project folder it was recorded in (the cwd in its
+// transcript), unless an explicit project was given.
 type store struct {
-	projectDir string
+	root       string // e.g. ~/.claude/projects
+	projectDir string // explicit target folder; empty means per-session
 }
 
 var nonAlnum = regexp.MustCompile(`[^A-Za-z0-9]`)
@@ -66,9 +71,9 @@ var nonAlnum = regexp.MustCompile(`[^A-Za-z0-9]`)
 // store, e.g. C:\opt\repos\x -> C--opt-repos-x.
 func encodeProject(path string) string { return nonAlnum.ReplaceAllString(path, "-") }
 
-// newStore resolves the local store directory. storeRoot defaults to
-// $CLAUDE_CONFIG_DIR/projects or ~/.claude/projects; project defaults to the
-// current directory.
+// newStore resolves the store. storeRoot defaults to
+// $CLAUDE_CONFIG_DIR/projects or ~/.claude/projects. If project is empty,
+// each session goes to the folder for the cwd recorded in its transcript.
 func newStore(storeRoot, project string) (store, error) {
 	if storeRoot == "" {
 		cfg := os.Getenv("CLAUDE_CONFIG_DIR")
@@ -81,22 +86,63 @@ func newStore(storeRoot, project string) (store, error) {
 		}
 		storeRoot = filepath.Join(cfg, "projects")
 	}
-	if project == "" {
-		wd, err := os.Getwd()
+	st := store{root: storeRoot}
+	if project != "" {
+		abs, err := filepath.Abs(project)
 		if err != nil {
 			return store{}, err
 		}
-		project = wd
+		st.projectDir = filepath.Join(storeRoot, encodeProject(abs))
 	}
-	abs, err := filepath.Abs(project)
-	if err != nil {
-		return store{}, err
-	}
-	return store{projectDir: filepath.Join(storeRoot, encodeProject(abs))}, nil
+	return st, nil
 }
 
-func (s store) localPath(id string) string {
-	return filepath.Join(s.projectDir, id+".jsonl")
+// transcriptCwd returns the working directory the session was started in,
+// taken from the first record that carries one.
+func transcriptCwd(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	r := bufio.NewReaderSize(f, 1<<20)
+	for i := 0; i < 200; i++ {
+		line, err := r.ReadBytes('\n')
+		var rec struct {
+			Cwd string `json:"cwd"`
+		}
+		if json.Unmarshal(line, &rec) == nil && rec.Cwd != "" {
+			return rec.Cwd
+		}
+		if err != nil {
+			break
+		}
+	}
+	return ""
+}
+
+// dirFor is the store folder a saved session restores into: the explicit
+// project, else the transcript's cwd, else the current directory.
+func (s store) dirFor(saved string) string {
+	if s.projectDir != "" {
+		return s.projectDir
+	}
+	cwd := transcriptCwd(saved)
+	if cwd == "" {
+		cwd, _ = os.Getwd()
+	}
+	return filepath.Join(s.root, encodeProject(cwd))
+}
+
+func (s store) describe() string {
+	if s.projectDir != "" {
+		return s.projectDir
+	}
+	return s.root + " (each session's original project)"
+}
+
+func (s store) localPath(saved, id string) string {
+	return filepath.Join(s.dirFor(saved), id+".jsonl")
 }
 
 func compareFiles(saved, local string) (syncState, error) {

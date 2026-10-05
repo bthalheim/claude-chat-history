@@ -72,8 +72,10 @@ sessions into the local Claude Code store so they can be resumed.
 Without arguments, looks for .chat-history or chat-history in the current
 directory. Pass a directory as an argument or with --dir to use another one.
 
-Restored sessions go to the local store folder for the current directory
-(or --project), under ~/.claude/projects (or --store).`,
+Restored sessions go to Claude's central store (~/.claude/projects, or
+--store), into the project folder each was recorded in (the cwd in its
+transcript), so they appear when resuming in that project. Use --project to
+force a single project folder.`,
 		Args:          cobra.MaximumNArgs(1),
 		Version:       version,
 		SilenceUsage:  true,
@@ -128,9 +130,9 @@ func newStatusCmd(opts *options) *cobra.Command {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "saved: %s\nlocal: %s\n\n", dir, st.projectDir)
+			fmt.Fprintf(out, "saved: %s\nstore: %s\n\n", dir, st.describe())
 			for _, it := range items {
-				s, err := compareFiles(it.path, st.localPath(it.id))
+				s, err := compareFiles(it.path, st.localPath(it.path, it.id))
 				if err != nil {
 					s = stUnknown
 				}
@@ -184,7 +186,7 @@ first.`,
 			out := cmd.OutOrStdout()
 			failed := 0
 			for _, it := range targets {
-				res, err := restoreFile(it.path, st.localPath(it.id), force)
+				res, err := restoreFile(it.path, st.localPath(it.path, it.id), force)
 				if err != nil {
 					failed++
 					fmt.Fprintf(out, "%s  skipped: %v\n", it.id, err)

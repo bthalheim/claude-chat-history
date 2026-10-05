@@ -339,7 +339,7 @@ func (m model) View() string {
 	case m.err != nil:
 		sb.WriteString("error: " + m.err.Error() + "\n")
 	default:
-		sb.WriteString(helpSt.Render(ansi.Truncate("press / to search · restore target: "+m.st.projectDir, m.w, "…")) + "\n")
+		sb.WriteString(helpSt.Render(ansi.Truncate("press / to search · restore target: "+m.st.describe(), m.w, "…")) + "\n")
 	}
 	lh := m.listHeight()
 	for row := 0; row < lh; row++ {

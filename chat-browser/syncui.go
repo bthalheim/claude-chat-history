@@ -18,7 +18,7 @@ func (m *model) refreshSync() {
 		if it.isMD {
 			continue
 		}
-		st, err := compareFiles(it.path, m.st.localPath(it.id))
+		st, err := compareFiles(it.path, m.st.localPath(it.path, it.id))
 		if err != nil {
 			st = stUnknown
 		}
@@ -33,7 +33,7 @@ func (m *model) restore(it item, force bool) {
 		m.msg = "only chat sessions can be restored, not daily logs"
 		return
 	}
-	res, err := restoreFile(it.path, m.st.localPath(it.id), force)
+	res, err := restoreFile(it.path, m.st.localPath(it.path, it.id), force)
 	var nf *needsForceError
 	switch {
 	case errors.As(err, &nf):
@@ -57,7 +57,7 @@ func (m *model) restoreAllSafe() {
 		}
 		switch st := m.sync[it.id]; {
 		case st.safe():
-			if _, err := restoreFile(it.path, m.st.localPath(it.id), false); err != nil {
+			if _, err := restoreFile(it.path, m.st.localPath(it.path, it.id), false); err != nil {
 				failed++
 			} else {
 				done++
